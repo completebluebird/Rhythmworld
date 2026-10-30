@@ -13,9 +13,7 @@ MonoBehaviour:
   m_Name: StampChart
   m_EditorClassIdentifier: Assembly-CSharp::StampChart
   chartName: "\uC0C8 \uCC44\uBCF4"
-  startBeat: 13
+  firstPaperBeat: 9
   endBeat: 0
-  stepsPerBeat: 1
-  pattern: xx.
+  papers: nnsnnt.
   restRanges: []
-  extraBeats: []

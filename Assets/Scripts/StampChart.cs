@@ -14,8 +14,8 @@ public class StampChart : ScriptableObject
 
     public string chartName = "새 채보";
 
-    [Tooltip("첫 서류의 1박이 오는 박 (14 = 음악 진입(10박) 다음 첫 강박)")]
-    public float firstPaperBeat = 14f;
+    [Tooltip("첫 서류의 1박이 오는 박 (9 = 첫 도장이 음악 진입(10박)에 맞음)")]
+    public float firstPaperBeat = 9f;
 
     [Tooltip("마지막으로 볼 박. 0이면 곡 끝까지")]
     public float endBeat = 0f;

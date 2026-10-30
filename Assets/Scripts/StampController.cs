@@ -8,7 +8,7 @@ using UnityEngine.InputSystem;
 // 도장찍기 프로토타입: 서류 한 장 = 4박.
 //   1박 예고음 + 인턴이 서류를 건넴 / 2박 왼손 도장 / 3박 오른손 서명 / 4박 인턴이 서류를 가져감
 // 서류 종류: 일반 = 2박 도장, 3박 서명 / 시크릿 = 2박·2.5박 도장 두 번, 3박 서명 / 함정 = 도장 금지, 3박 서명
-// 조작: F·스페이스·마우스 왼쪽 = 도장, J·마우스 오른쪽 = 서명, 1~4 = 채보 바꾸고 처음부터, R = 처음부터,
+// 조작: F·스페이스·마우스 왼쪽 = 도장, J·마우스 오른쪽 = 서명, 1~5 = 채보 바꾸고 처음부터, R = 처음부터,
 //       G = 가이드 틱 켜기/끄기, [ ] = 입력 보정 -10ms/+10ms
 // 도장·펜·서류는 비워 두면 임시 도형을 만든다(서류 종류는 지금은 색으로만 구분).
 public class StampController : MonoBehaviour
@@ -29,8 +29,11 @@ public class StampController : MonoBehaviour
     [Header("오브젝트 (비우면 임시 도형 생성)")]
     public Transform stamp;
     public Transform pen;
+    public Transform intern;          // 1박·4박에 서류 쪽으로 손을 뻗는다
+    public GameObject paperPrefab;    // 서류 한 장. 종류는 색과 띠·사진으로 구분
     public Vector3 paperPoint = new Vector3(0f, 0f, 0.02f);
     public Vector3 internPoint = new Vector3(0f, 0.001f, 0.45f);   // 인턴 쪽(화면 위)
+    public Vector3 internReach = new Vector3(0f, 0f, -0.12f);      // 손 뻗을 때 인턴이 움직이는 거리
     public bool setupCamera = true;
 
     [Header("소리 (비우면 도장·서명·틱은 임시 소리, 나머지는 무음)")]
@@ -51,6 +54,7 @@ public class StampController : MonoBehaviour
         public int type;      // 0 일반, 1 시크릿, 2 함정
         public double time;   // 1박 시간(초)
         public Transform obj;
+        public float top;     // 서류 윗면 높이(자국을 올릴 곳)
         public bool failed;
         public int stamps;
     }
@@ -77,8 +81,8 @@ public class StampController : MonoBehaviour
     string lastJudgeText = "";
     Color lastJudgeColor = Color.white;
 
-    Vector3 stampRest, penRest;
-    float stampPressTimer, penPressTimer;
+    Vector3 stampRest, penRest, internRest;
+    float stampPressTimer, penPressTimer, internReachTimer;
 
     AudioSource sfxSource;
     AudioSource[] scheduledSources;
@@ -96,7 +100,7 @@ public class StampController : MonoBehaviour
             charts.Add(StampChart.CreatePreset("일반만", "n"));
             charts.Add(StampChart.CreatePreset("일반+시크릿", "nnns"));
             charts.Add(StampChart.CreatePreset("일반+함정", "nnnt"));
-            charts.Add(StampChart.CreatePreset("혼합", "nsnt.ntsn"));
+            charts.Add(StampChart.CreatePreset("혼합", "nnsnnt.ntns"));
         }
         chartIndex = Mathf.Clamp(chartIndex, 0, charts.Count - 1);
 
@@ -112,9 +116,10 @@ public class StampController : MonoBehaviour
         if (signClip == null) signClip = MakeClip("PenScratch", 900f, 0.08f, 0.9f);
         if (guideTickClip == null) guideTickClip = MakeClip("GuideTick", 1600f, 0.03f, 0f);
 
-        if (stamp == null || pen == null) CreatePlaceholderScene();
+        if (stamp == null || pen == null || intern == null) CreatePlaceholderScene();
         stampRest = stamp.position;
         penRest = pen.position;
+        internRest = intern.position;
         if (setupCamera && Camera.main != null)
         {
             Camera.main.transform.position = new Vector3(0f, 1.1f, -0.62f);
@@ -194,7 +199,11 @@ public class StampController : MonoBehaviour
         UpdatePapers(conductor.SongTimeNow);
         ScheduleSounds();
         AnimateTool(stamp, ref stampPressTimer, stampRest, paperPoint + new Vector3(-0.05f, 0.03f, -0.03f));
-        AnimateTool(pen, ref penPressTimer, penRest, paperPoint + new Vector3(0.06f, 0.04f, -0.09f));
+        AnimateTool(pen, ref penPressTimer, penRest, paperPoint + new Vector3(0.07f, 0.012f, -0.1f));
+
+        internReachTimer -= Time.deltaTime;
+        var internTarget = internReachTimer > 0f ? internRest + internReach : internRest;
+        intern.position = Vector3.Lerp(intern.position, internTarget, Time.deltaTime * 14f);
     }
 
     void OnStamp(double t)
@@ -273,12 +282,14 @@ public class StampController : MonoBehaviour
         while (nextSpawn < papers.Count && t >= papers[nextSpawn].time)
         {
             var p = papers[nextSpawn++];
-            p.obj = SpawnPaper(p.type);
+            SpawnPaper(p);
+            internReachTimer = (float)spb * 0.4f;
             StartCoroutine(Slide(p.obj, paperPoint, (float)spb * 0.3f, false));
         }
         while (nextLeave < nextSpawn && t >= papers[nextLeave].time + spb * 3)
         {
             var p = papers[nextLeave++];
+            internReachTimer = (float)spb * 0.4f;
             if (!p.failed) typeCleared[p.type]++;
             var clip = p.failed ? failClip : successClip;
             if (clip != null) sfxSource.PlayOneShot(clip);
@@ -338,24 +349,43 @@ public class StampController : MonoBehaviour
     }
 
     // 지금은 색으로만 구분: 일반 = 흰 종이, 시크릿 = 주황 종이 + 빨간 띠, 함정 = 흰 종이 + 회색·노란 '사장 사진'
-    Transform SpawnPaper(int type)
+    void SpawnPaper(Paper p)
     {
+        int type = p.type;
         var paper = new GameObject("Paper_" + TypeNames[type]).transform;
         paper.position = internPoint;
-        var sheetColor = type == 1 ? new Color(1f, 0.85f, 0.65f) : new Color(0.96f, 0.95f, 0.9f);
-        Primitive(PrimitiveType.Cube, "Sheet", paper, new Vector3(0.21f, 0.002f, 0.297f), sheetColor, Vector3.zero);
+        var sheetColor = type == 1 ? new Color(1f, 0.8f, 0.55f) : Color.white;
+        if (paperPrefab != null)
+        {
+            var sheet = Instantiate(paperPrefab, paper, false);
+            sheet.transform.localPosition = Vector3.zero;
+            sheet.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);   // 글씨가 내 쪽에서 바로 읽히게
+            float maxY = 0f;
+            foreach (var r in sheet.GetComponentsInChildren<Renderer>())
+            {
+                if (type == 1) r.material.SetColor("_BaseColor", sheetColor);
+                maxY = Mathf.Max(maxY, r.bounds.max.y - paper.position.y);
+            }
+            p.top = maxY;
+        }
+        else
+        {
+            Primitive(PrimitiveType.Cube, "Sheet", paper, new Vector3(0.21f, 0.002f, 0.297f), sheetColor, Vector3.zero);
+            p.top = 0.001f;
+        }
+        float y = p.top + 0.0005f;
         if (type == 1)
-            Primitive(PrimitiveType.Cube, "SecretBand", paper, new Vector3(0.21f, 0.0005f, 0.035f), new Color(0.85f, 0.1f, 0.1f), new Vector3(0f, 0.0015f, 0.12f));
+            Primitive(PrimitiveType.Cube, "SecretBand", paper, new Vector3(0.21f, 0.0005f, 0.035f), new Color(0.85f, 0.1f, 0.1f), new Vector3(0f, y, 0.12f));
         if (type == 2)
-            Primitive(PrimitiveType.Cube, "BossPhoto", paper, new Vector3(0.07f, 0.0005f, 0.08f), new Color(0.75f, 0.7f, 0.4f), new Vector3(0.05f, 0.0015f, 0.07f));
-        return paper;
+            Primitive(PrimitiveType.Cube, "BossPhoto", paper, new Vector3(0.07f, 0.0005f, 0.08f), new Color(0.75f, 0.7f, 0.4f), new Vector3(0.05f, y, 0.07f));
+        p.obj = paper;
     }
 
     // 시크릿의 두 번째 도장은 첫 번째 위쪽에 찍힌다
     static void AddStampMark(Paper paper, Color color, float shiftX)
     {
         if (paper.obj == null) return;
-        var pos = new Vector3(-0.05f + shiftX, 0.002f, -0.03f + paper.stamps * 0.06f);
+        var pos = new Vector3(-0.05f + shiftX, paper.top + 0.001f, -0.03f + paper.stamps * 0.06f);
         paper.stamps++;
         Primitive(PrimitiveType.Cylinder, "StampMark", paper.obj, new Vector3(0.05f, 0.0005f, 0.05f), color, pos);
     }
@@ -363,15 +393,18 @@ public class StampController : MonoBehaviour
     static void AddSignMark(Paper paper, Color color, float shiftX)
     {
         if (paper.obj == null) return;
-        Primitive(PrimitiveType.Cube, "SignMark", paper.obj, new Vector3(0.07f, 0.0005f, 0.008f), color, new Vector3(0.06f + shiftX, 0.002f, -0.09f));
+        Primitive(PrimitiveType.Cube, "SignMark", paper.obj, new Vector3(0.07f, 0.0005f, 0.008f), color, new Vector3(0.06f + shiftX, paper.top + 0.001f, -0.09f));
     }
 
-    // 씬 배치 에셋이 들어오기 전까지 쓰는 임시 책상, 인턴, 도장(왼쪽), 펜(오른쪽)
+    // 씬에 없는 것만 임시 도형으로 만든다: 도장(왼쪽), 펜(오른쪽), 인턴(책상과 함께)
     void CreatePlaceholderScene()
     {
         var root = new GameObject("StampPrototype_Placeholder").transform;
-        Primitive(PrimitiveType.Cube, "Desk", root, new Vector3(2.4f, 0.08f, 1.0f), new Color(0.55f, 0.38f, 0.25f), new Vector3(0f, -0.04f, 0f));
-        Primitive(PrimitiveType.Cube, "Intern", root, new Vector3(0.3f, 0.25f, 0.08f), new Color(0.35f, 0.5f, 0.7f), internPoint + new Vector3(0f, 0.12f, 0.12f));
+        if (intern == null)
+        {
+            Primitive(PrimitiveType.Cube, "Desk", root, new Vector3(2.4f, 0.08f, 1.0f), new Color(0.55f, 0.38f, 0.25f), new Vector3(0f, -0.04f, 0f));
+            intern = Primitive(PrimitiveType.Cube, "Intern", root, new Vector3(0.3f, 0.25f, 0.08f), new Color(0.35f, 0.5f, 0.7f), internPoint + new Vector3(0f, 0.12f, 0.12f)).transform;
+        }
 
         if (stamp == null)
         {
@@ -446,6 +479,7 @@ public class StampController : MonoBehaviour
         if (kb.digit2Key.wasPressedThisFrame) chartKey = 1;
         if (kb.digit3Key.wasPressedThisFrame) chartKey = 2;
         if (kb.digit4Key.wasPressedThisFrame) chartKey = 3;
+        if (kb.digit5Key.wasPressedThisFrame) chartKey = 4;
         restart = kb.rKey.wasPressedThisFrame;
         toggleTick = kb.gKey.wasPressedThisFrame;
         if (kb.leftBracketKey.wasPressedThisFrame) offsetStep = -1;
@@ -457,6 +491,7 @@ public class StampController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Alpha2)) chartKey = 1;
         if (Input.GetKeyDown(KeyCode.Alpha3)) chartKey = 2;
         if (Input.GetKeyDown(KeyCode.Alpha4)) chartKey = 3;
+        if (Input.GetKeyDown(KeyCode.Alpha5)) chartKey = 4;
         restart = Input.GetKeyDown(KeyCode.R);
         toggleTick = Input.GetKeyDown(KeyCode.G);
         if (Input.GetKeyDown(KeyCode.LeftBracket)) offsetStep = -1;
@@ -480,7 +515,7 @@ public class StampController : MonoBehaviour
             $"일반 {typeCleared[0]}/{typeTotal[0]}   시크릿 {typeCleared[1]}/{typeTotal[1]}   함정 {typeCleared[2]}/{typeTotal[2]}\n" +
             $"Perfect {perfect}   Good {good}   Miss {miss}   Bad {bad}   헛입력 {emptyPress}\n" +
             $"평균 오차 {avg}   입력 보정 {inputOffset * 1000:0}ms   가이드 틱 {(guideTick ? "켜짐" : "꺼짐")}\n" +
-            "F/스페이스/왼클릭 도장 · J/오른클릭 서명 · 1~4 채보 · R 다시 · G 틱 · [ ] 보정";
+            "F/스페이스/왼클릭 도장 · J/오른클릭 서명 · 1~5 채보 · R 다시 · G 틱 · [ ] 보정";
         GUI.Label(new Rect(20, 20, 1400, 170), text, hudStyle);
 
         var judgeStyle = new GUIStyle(hudStyle) { fontSize = 40 };
