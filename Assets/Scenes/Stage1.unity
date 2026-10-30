@@ -477,20 +477,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StampController
   conductor: {fileID: 1443684028}
-  charts:
-  - {fileID: 11400000, guid: 11634523901cd234bb49fa58c4f5ff52, type: 2}
-  chartIndex: 1
+  charts: []
+  chartIndex: 0
   perfectWindow: 0.045
   goodWindow: 0.1
   inputOffset: 0
   stamp: {fileID: 0}
-  paperPrefab: {fileID: 0}
-  stampPoint: {x: 0, y: 0, z: 0.02}
-  paperEnter: {x: 0, y: 0.001, z: 0.35}
-  paperExit: {x: -0.52, y: 0.02, z: 0}
-  stampRestHeight: 0.18
+  pen: {fileID: 0}
+  paperPoint: {x: 0, y: 0, z: 0.02}
+  internPoint: {x: 0, y: 0.001, z: 0.45}
   setupCamera: 1
-  stampClip: {fileID: 0}
+  normalCue: {fileID: 8300000, guid: 914200f3531b81b479cba3112911ca8f, type: 3}
+  secretCue: {fileID: 8300000, guid: af975eedfe15d3c4bb37dd78885cdd7b, type: 3}
+  trapCue: {fileID: 8300000, guid: e21b61f1d0e5dca4696364bd7c5e18a0, type: 3}
+  stampClip: {fileID: 8300000, guid: de7ef29225001dc46be095dc5deb9d4d, type: 3}
+  signClip: {fileID: 8300000, guid: ad22ca1ff5258624ba572678a007a613, type: 3}
+  successClip: {fileID: 8300000, guid: 2967813d6d861f64ebce6ffee4c1e343, type: 3}
+  failClip: {fileID: 8300000, guid: 7211b02f913df60449987f970c10b668, type: 3}
   guideTickClip: {fileID: 0}
   guideTick: 1
 --- !u!1 &1443684027
