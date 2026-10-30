@@ -8,7 +8,7 @@ using UnityEngine.InputSystem;
 // 도장찍기 프로토타입: 서류 한 장 = 4박.
 //   1박 예고음 + 인턴이 서류를 건넴 / 2박 왼손 도장 / 3박 오른손 서명 / 4박 인턴이 서류를 가져감
 // 서류 종류: 일반 = 2박 도장, 3박 서명 / 시크릿 = 2박·2.5박 도장 두 번, 3박 서명 / 함정 = 도장 금지, 3박 서명
-// 조작: F·스페이스·마우스 왼쪽 = 도장, J·마우스 오른쪽 = 서명, 1~4 = 채보 바꾸고 처음부터, R = 처음부터,
+// 조작: F·스페이스·마우스 왼쪽 = 도장, J·마우스 오른쪽 = 서명, 1~5 = 채보 바꾸고 처음부터, R = 처음부터,
 //       G = 가이드 틱 켜기/끄기, [ ] = 입력 보정 -10ms/+10ms
 // 도장·펜·서류는 비워 두면 임시 도형을 만든다(서류 종류는 지금은 색으로만 구분).
 public class StampController : MonoBehaviour
@@ -100,7 +100,7 @@ public class StampController : MonoBehaviour
             charts.Add(StampChart.CreatePreset("일반만", "n"));
             charts.Add(StampChart.CreatePreset("일반+시크릿", "nnns"));
             charts.Add(StampChart.CreatePreset("일반+함정", "nnnt"));
-            charts.Add(StampChart.CreatePreset("혼합", "nsnt.ntsn"));
+            charts.Add(StampChart.CreatePreset("혼합", "nnsnnt.ntns"));
         }
         chartIndex = Mathf.Clamp(chartIndex, 0, charts.Count - 1);
 
@@ -479,6 +479,7 @@ public class StampController : MonoBehaviour
         if (kb.digit2Key.wasPressedThisFrame) chartKey = 1;
         if (kb.digit3Key.wasPressedThisFrame) chartKey = 2;
         if (kb.digit4Key.wasPressedThisFrame) chartKey = 3;
+        if (kb.digit5Key.wasPressedThisFrame) chartKey = 4;
         restart = kb.rKey.wasPressedThisFrame;
         toggleTick = kb.gKey.wasPressedThisFrame;
         if (kb.leftBracketKey.wasPressedThisFrame) offsetStep = -1;
@@ -490,6 +491,7 @@ public class StampController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Alpha2)) chartKey = 1;
         if (Input.GetKeyDown(KeyCode.Alpha3)) chartKey = 2;
         if (Input.GetKeyDown(KeyCode.Alpha4)) chartKey = 3;
+        if (Input.GetKeyDown(KeyCode.Alpha5)) chartKey = 4;
         restart = Input.GetKeyDown(KeyCode.R);
         toggleTick = Input.GetKeyDown(KeyCode.G);
         if (Input.GetKeyDown(KeyCode.LeftBracket)) offsetStep = -1;
@@ -513,7 +515,7 @@ public class StampController : MonoBehaviour
             $"일반 {typeCleared[0]}/{typeTotal[0]}   시크릿 {typeCleared[1]}/{typeTotal[1]}   함정 {typeCleared[2]}/{typeTotal[2]}\n" +
             $"Perfect {perfect}   Good {good}   Miss {miss}   Bad {bad}   헛입력 {emptyPress}\n" +
             $"평균 오차 {avg}   입력 보정 {inputOffset * 1000:0}ms   가이드 틱 {(guideTick ? "켜짐" : "꺼짐")}\n" +
-            "F/스페이스/왼클릭 도장 · J/오른클릭 서명 · 1~4 채보 · R 다시 · G 틱 · [ ] 보정";
+            "F/스페이스/왼클릭 도장 · J/오른클릭 서명 · 1~5 채보 · R 다시 · G 틱 · [ ] 보정";
         GUI.Label(new Rect(20, 20, 1400, 170), text, hudStyle);
 
         var judgeStyle = new GUIStyle(hudStyle) { fontSize = 40 };
