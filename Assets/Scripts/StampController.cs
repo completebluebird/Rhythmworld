@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -60,6 +61,27 @@ public class StampController : MonoBehaviour
     public AudioClip guideTickClip;
     public bool guideTick = true;   // 눌러야 할 박마다 '틱' 소리로 정답 타이밍을 들려줌(비교용)
 
+    [Header("엔딩 연출 (마지막 서류 회수 후)")]
+    [Tooltip("성공 비율 경계 4개. 0~20%, 20~40%, 40~60%, 60~80%, 80~100% → 5단계")]
+    public float[] pileThresholds = { 0.2f, 0.4f, 0.6f, 0.8f };
+    [Tooltip("단계별 서류 더미 장수 (단계 0~4)")]
+    public int[] pileLayers = { 3, 8, 14, 20, 28 };
+    public Vector3 pileSpot = new Vector3(0.2f, 0f, -0.02f);
+    [Tooltip("벽의 부장님 사진 자리(월드 좌표)")]
+    public Vector3 bossSpot = new Vector3(-0.15f, 0.72f, 0.8f);
+    [Tooltip("성공 비율이 이 값 이상이면 사진을 액자에 건다. 미만이면 기울고 테이프로 붙인다")]
+    public float bossPassRatio = 0.6f;
+    public float endWait = 1f;
+    public float endMoveTime = 2f;
+    public Vector3 endViewPos = new Vector3(-0.15f, 0.6f, -0.6f);
+    public Vector3 endViewEuler = new Vector3(18f, -25f, 0f);
+    [Tooltip("비우면 endViewPos/endViewEuler 자리에 EndView 마커를 만든다")]
+    public Transform endView;
+    [Tooltip("연출이 끝난 뒤 호출. 결과 화면 넘김은 여기 연결")]
+    public UnityEvent onEndingFinished;
+    public float SuccessRatio { get; private set; }
+    public int PileStage { get; private set; }
+
     enum Judge { Perfect, Good, Miss, Bad }
 
     class Paper
@@ -103,6 +125,11 @@ public class StampController : MonoBehaviour
     AudioSource[] scheduledSources;
     int scheduledSourceIndex;
 
+    Transform pileRoot, bossRoot;
+    GameObject bossTape1, bossTape2;
+    Vector3 camStartPos;
+    Quaternion camStartRot;
+
     GUIStyle hudStyle;
 
     void Awake()
@@ -143,6 +170,18 @@ public class StampController : MonoBehaviour
             Camera.main.fieldOfView = 50f;
             Camera.main.nearClipPlane = 0.05f;
         }
+        if (Camera.main != null)
+        {
+            camStartPos = Camera.main.transform.position;
+            camStartRot = Camera.main.transform.rotation;
+        }
+        if (endView == null)
+        {
+            endView = new GameObject("EndView").transform;
+            endView.position = endViewPos;
+            endView.rotation = Quaternion.Euler(endViewEuler);
+        }
+        BuildBossPhoto();
     }
 
     void Start()
@@ -153,6 +192,7 @@ public class StampController : MonoBehaviour
     public void Restart()
     {
         StopAllCoroutines();
+        ResetEnding();
         foreach (var p in papers) if (p.obj != null) Destroy(p.obj.gameObject);
         foreach (var src in scheduledSources) src.Stop();
 
@@ -321,7 +361,77 @@ public class StampController : MonoBehaviour
             var clip = p.failed ? failClip : successClip;
             if (clip != null) sfxSource.PlayOneShot(clip);
             StartCoroutine(Slide(p.obj, internPoint, (float)spb * 0.3f, true));
+            if (nextLeave == papers.Count) StartCoroutine(Ending());
         }
+    }
+
+    // 마지막 서류를 회수하고 1초 뒤, 더미와 부장님 사진을 보여 주며 카메라를 EndView로 옮긴다
+    IEnumerator Ending()
+    {
+        yield return new WaitForSeconds(endWait);
+
+        int success = 0;
+        foreach (var p in papers) if (!p.failed) success++;
+        SuccessRatio = papers.Count > 0 ? (float)success / papers.Count : 0f;
+        PileStage = 0;
+        for (int i = 0; i < pileThresholds.Length; i++) if (SuccessRatio >= pileThresholds[i]) PileStage++;
+
+        BuildPile(pileLayers[Mathf.Min(PileStage, pileLayers.Length - 1)]);
+        ShowBoss(SuccessRatio >= bossPassRatio);
+
+        var cam = Camera.main != null ? Camera.main.transform : null;
+        if (cam != null)
+        {
+            Vector3 fromPos = cam.position;
+            Quaternion fromRot = cam.rotation;
+            for (float e = 0f; e < endMoveTime; e += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, e / endMoveTime);
+                cam.SetPositionAndRotation(Vector3.Lerp(fromPos, endView.position, k), Quaternion.Slerp(fromRot, endView.rotation, k));
+                yield return null;
+            }
+            cam.SetPositionAndRotation(endView.position, endView.rotation);
+        }
+        onEndingFinished.Invoke();
+    }
+
+    void BuildPile(int layers)
+    {
+        if (pileRoot != null) Destroy(pileRoot.gameObject);
+        pileRoot = new GameObject("Pile").transform;
+        pileRoot.position = pileSpot;
+        for (int i = 0; i < layers; i++)
+            Primitive(PrimitiveType.Cube, "Sheet", pileRoot, new Vector3(0.21f, 0.001f, 0.297f), new Color(0.95f, 0.95f, 0.92f), new Vector3(0f, i * 0.0012f, 0f));
+    }
+
+    // 액자에 걸린 사진(성공) 또는 기울고 테이프 2개로 붙인 사진(실패). 평소에는 숨김
+    void BuildBossPhoto()
+    {
+        bossRoot = new GameObject("BossFrame").transform;
+        bossRoot.position = bossSpot;
+        Primitive(PrimitiveType.Cube, "Frame", bossRoot, new Vector3(0.12f, 0.16f, 0.01f), new Color(0.2f, 0.15f, 0.1f), Vector3.zero);
+        Primitive(PrimitiveType.Cube, "Photo", bossRoot, new Vector3(0.1f, 0.14f, 0.002f), new Color(0.75f, 0.7f, 0.4f), new Vector3(0f, 0f, -0.006f));
+        bossTape1 = Primitive(PrimitiveType.Cube, "Tape1", bossRoot, new Vector3(0.03f, 0.012f, 0.002f), new Color(0.92f, 0.92f, 0.85f), new Vector3(-0.045f, 0.065f, -0.008f));
+        bossTape2 = Primitive(PrimitiveType.Cube, "Tape2", bossRoot, new Vector3(0.03f, 0.012f, 0.002f), new Color(0.92f, 0.92f, 0.85f), new Vector3(0.045f, -0.065f, -0.008f));
+        bossRoot.gameObject.SetActive(false);
+    }
+
+    void ShowBoss(bool pass)
+    {
+        bossRoot.gameObject.SetActive(true);
+        bossRoot.localRotation = pass ? Quaternion.identity : Quaternion.Euler(0f, 0f, -6f);
+        bossTape1.SetActive(!pass);
+        bossTape2.SetActive(!pass);
+    }
+
+    void ResetEnding()
+    {
+        if (pileRoot != null) Destroy(pileRoot.gameObject);
+        pileRoot = null;
+        if (bossRoot != null) bossRoot.gameObject.SetActive(false);
+        if (Camera.main != null) Camera.main.transform.SetPositionAndRotation(camStartPos, camStartRot);
+        SuccessRatio = 0f;
+        PileStage = 0;
     }
 
     // 서류 결과로 인턴 크기 목표를 정한다. Bad/Miss 있음 → 작아짐, Good 섞임 → 그대로, 전부 Perfect → 커짐
