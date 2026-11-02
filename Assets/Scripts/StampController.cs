@@ -55,7 +55,7 @@ public class StampController : MonoBehaviour
     public int[] pileLayers = { 3, 8, 14, 20, 28 };
     public Vector3 pileSpot = new Vector3(0.2f, 0f, -0.02f);
     [Tooltip("벽의 부장님 사진 자리(월드 좌표)")]
-    public Vector3 bossSpot = new Vector3(-0.05f, 0.55f, 0.8f);
+    public Vector3 bossSpot = new Vector3(-0.15f, 0.72f, 0.8f);
     [Tooltip("성공 비율이 이 값 이상이면 사진을 액자에 건다. 미만이면 기울고 테이프로 붙인다")]
     public float bossPassRatio = 0.6f;
     public float endWait = 1f;
