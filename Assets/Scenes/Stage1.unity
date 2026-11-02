@@ -1163,6 +1163,7 @@ MonoBehaviour:
   goodWindow: 0.1
   inputOffset: 0
   stamp: {fileID: 0}
+  stampPrefab: {fileID: 4918908128792303786, guid: d9bfe80cdfcc3cf449904bdec061e0c1, type: 3}
   pen: {fileID: 1380973495}
   intern: {fileID: 582373721}
   paperPrefab: {fileID: 3689213640607575970, guid: 409a59359549aef418ba80e0b2e0056a, type: 3}
