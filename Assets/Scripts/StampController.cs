@@ -28,6 +28,7 @@ public class StampController : MonoBehaviour
 
     [Header("오브젝트 (비우면 임시 도형 생성)")]
     public Transform stamp;
+    public GameObject stampPrefab;    // Assets/Prefabs/Stamp.prefab (원점 = 손잡이 기준, 인면 바닥이 원점 아래 0.03)
     public Transform pen;
     public Transform intern;          // 1박·4박에 서류 쪽으로 손을 뻗는다
     public GameObject paperPrefab;    // 서류 한 장. 종류는 색과 띠·사진으로 구분
@@ -408,11 +409,18 @@ public class StampController : MonoBehaviour
 
         if (stamp == null)
         {
-            stamp = new GameObject("Stamp").transform;
-            stamp.SetParent(root);
+            if (stampPrefab != null)
+            {
+                stamp = Instantiate(stampPrefab, root).transform;
+            }
+            else
+            {
+                stamp = new GameObject("Stamp").transform;
+                stamp.SetParent(root);
+                Primitive(PrimitiveType.Cylinder, "Stamp_Body", stamp, new Vector3(0.05f, 0.03f, 0.05f), new Color(0.42f, 0.25f, 0.15f), Vector3.zero);
+                Primitive(PrimitiveType.Sphere, "Stamp_Handle", stamp, Vector3.one * 0.04f, new Color(0.3f, 0.18f, 0.1f), new Vector3(0f, 0.05f, 0f));
+            }
             stamp.position = paperPoint + new Vector3(-0.3f, 0.12f, 0f);
-            Primitive(PrimitiveType.Cylinder, "Stamp_Body", stamp, new Vector3(0.05f, 0.03f, 0.05f), new Color(0.42f, 0.25f, 0.15f), Vector3.zero);
-            Primitive(PrimitiveType.Sphere, "Stamp_Handle", stamp, Vector3.one * 0.04f, new Color(0.3f, 0.18f, 0.1f), new Vector3(0f, 0.05f, 0f));
         }
         if (pen == null)
         {
