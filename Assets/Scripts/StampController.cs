@@ -37,6 +37,18 @@ public class StampController : MonoBehaviour
     public Vector3 internReach = new Vector3(0f, 0f, -0.12f);      // 손 뻗을 때 인턴이 움직이는 거리
     public bool setupCamera = true;
 
+    [Header("인턴 크기 (4박 회수 때 그 서류 결과로 바뀜)")]
+    [Tooltip("모든 입력이 Perfect면 이만큼 커짐 (0.1 = 10%)")]
+    public float growRate = 0.1f;
+    [Tooltip("Bad나 Miss가 하나라도 있으면 이만큼 작아짐 (0.1 = 10%)")]
+    public float shrinkRate = 0.1f;
+    public float minScale = 0.5f;
+    public float maxScale = 2f;
+    [Tooltip("크기 전환 시간(초)")]
+    public float scaleTime = 0.2f;
+    [Tooltip("인턴 손이 서류를 건네는 자리. 크기가 바뀌어도 이 자리에 고정된다")]
+    public Vector3 handPoint = new Vector3(0f, 0.001f, 0.45f);
+
     [Header("소리 (비우면 도장·서명·틱은 임시 소리, 나머지는 무음)")]
     public AudioClip normalCue;     // normal_start
     public AudioClip secretCue;     // secret_start
@@ -56,7 +68,8 @@ public class StampController : MonoBehaviour
         public double time;   // 1박 시간(초)
         public Transform obj;
         public float top;     // 서류 윗면 높이(자국을 올릴 곳)
-        public bool failed;
+        public bool failed;   // Bad 또는 Miss가 하나라도 있음
+        public bool hasGood;  // Good이 하나라도 있음
         public int stamps;
     }
 
@@ -82,8 +95,9 @@ public class StampController : MonoBehaviour
     string lastJudgeText = "";
     Color lastJudgeColor = Color.white;
 
-    Vector3 stampRest, penRest, internRest;
+    Vector3 stampRest, penRest, internRest, internRestBase, internBaseScale;
     float stampPressTimer, penPressTimer, internReachTimer;
+    float internFactor = 1f, internFactorFrom = 1f, internFactorTo = 1f, internFactorT;
 
     AudioSource sfxSource;
     AudioSource[] scheduledSources;
@@ -120,7 +134,8 @@ public class StampController : MonoBehaviour
         if (stamp == null || pen == null || intern == null) CreatePlaceholderScene();
         stampRest = stamp.position;
         penRest = pen.position;
-        internRest = intern.position;
+        internRest = internRestBase = intern.position;
+        internBaseScale = intern.localScale;
         if (setupCamera && Camera.main != null)
         {
             Camera.main.transform.position = new Vector3(0f, 1.1f, -0.62f);
@@ -169,6 +184,9 @@ public class StampController : MonoBehaviour
         scheduled.Sort((a, b) => a.Key.CompareTo(b.Key));
 
         nextStamp = nextSign = nextSpawn = nextLeave = nextScheduled = 0;
+        internFactor = internFactorFrom = internFactorTo = 1f;
+        internFactorT = scaleTime;
+        ApplyInternPose();
         perfect = good = miss = bad = emptyPress = 0;
         offsetSum = 0;
         offsetCount = 0;
@@ -201,6 +219,11 @@ public class StampController : MonoBehaviour
         ScheduleSounds();
         AnimateTool(stamp, ref stampPressTimer, stampRest, paperPoint + new Vector3(-0.05f, 0.03f, -0.03f));
         AnimateTool(pen, ref penPressTimer, penRest, paperPoint + new Vector3(0.07f, 0.012f, -0.1f));
+
+        internFactorT = Mathf.Min(internFactorT + Time.deltaTime, scaleTime);
+        float k = scaleTime > 0f ? internFactorT / scaleTime : 1f;
+        internFactor = Mathf.Lerp(internFactorFrom, internFactorTo, Mathf.SmoothStep(0f, 1f, k));
+        ApplyInternPose();
 
         internReachTimer -= Time.deltaTime;
         var internTarget = internReachTimer > 0f ? internRest + internReach : internRest;
@@ -250,7 +273,7 @@ public class StampController : MonoBehaviour
         offsetSum += delta;
         offsetCount++;
         bool isPerfect = abs <= perfectWindow;
-        if (isPerfect) perfect++; else good++;
+        if (isPerfect) perfect++; else { good++; note.paper.hasGood = true; }
 
         // Good은 빠르거나 늦은 만큼 옆으로 밀리고 살짝 기울고 흐릿하게 남는다
         float side = Mathf.Sign((float)delta);
@@ -293,11 +316,32 @@ public class StampController : MonoBehaviour
         {
             var p = papers[nextLeave++];
             internReachTimer = (float)spb * 0.4f;
+            ApplyInternScale(p);
             if (!p.failed) typeCleared[p.type]++;
             var clip = p.failed ? failClip : successClip;
             if (clip != null) sfxSource.PlayOneShot(clip);
             StartCoroutine(Slide(p.obj, internPoint, (float)spb * 0.3f, true));
         }
+    }
+
+    // 서류 결과로 인턴 크기 목표를 정한다. Bad/Miss 있음 → 작아짐, Good 섞임 → 그대로, 전부 Perfect → 커짐
+    void ApplyInternScale(Paper p)
+    {
+        float next = internFactorTo;
+        if (p.failed) next *= 1f - shrinkRate;
+        else if (!p.hasGood) next *= 1f + growRate;
+        next = Mathf.Clamp(next, minScale, maxScale);
+
+        internFactorFrom = internFactor;
+        internFactorTo = next;
+        internFactorT = 0f;
+    }
+
+    // 크기만큼 인턴 몸을 키우고, 손(handPoint)은 제자리에 있도록 몸의 위치를 옮긴다
+    void ApplyInternPose()
+    {
+        intern.localScale = internBaseScale * internFactor;
+        internRest = handPoint + (internRestBase - handPoint) * internFactor;
     }
 
     void ScheduleSounds()
