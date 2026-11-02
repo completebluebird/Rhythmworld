@@ -219,7 +219,7 @@ public class StampController : MonoBehaviour
         {
             bad++;
             onDesk.failed = true;
-            AddStampMark(onDesk, new Color(0.25f, 0.25f, 0.25f), 0f);
+            AddStampMark(onDesk, new Color(0.25f, 0.25f, 0.25f), -0.01f, 25f, 0.6f);   // 함정에 찍은 도장은 비뚤어지게
             ShowJudge("Bad (함정에 도장)", new Color(0.7f, 0.4f, 1f));
             return;
         }
@@ -251,10 +251,12 @@ public class StampController : MonoBehaviour
         bool isPerfect = abs <= perfectWindow;
         if (isPerfect) perfect++; else good++;
 
-        // Good은 빠르거나 늦은 만큼 옆으로 밀리고 흐릿하게 남는다
-        float shift = isPerfect ? 0f : Mathf.Sign((float)delta) * 0.02f;
-        if (isStamp) AddStampMark(note.paper, isPerfect ? new Color(0.8f, 0.08f, 0.08f) : new Color(0.9f, 0.5f, 0.5f), shift);
-        else AddSignMark(note.paper, isPerfect ? new Color(0.1f, 0.1f, 0.35f) : new Color(0.45f, 0.45f, 0.6f), shift);
+        // Good은 빠르거나 늦은 만큼 옆으로 밀리고 살짝 기울고 흐릿하게 남는다
+        float side = Mathf.Sign((float)delta);
+        float shift = isPerfect ? 0f : side * 0.02f;
+        float tilt = isPerfect ? 0f : side * 10f;
+        if (isStamp) AddStampMark(note.paper, isPerfect ? new Color(0.85f, 0.05f, 0.05f) : new Color(0.95f, 0.72f, 0.72f), shift, tilt, 1f);
+        else AddSignMark(note.paper, isPerfect ? new Color(0.1f, 0.1f, 0.35f) : new Color(0.5f, 0.5f, 0.62f), shift, tilt);
 
         int ms = (int)System.Math.Round(delta * 1000);
         string timing = ms > 0 ? $" (+{ms}ms 늦음)" : ms < 0 ? $" ({ms}ms 빠름)" : " (0ms)";
@@ -381,19 +383,21 @@ public class StampController : MonoBehaviour
         p.obj = paper;
     }
 
-    // 시크릿의 두 번째 도장은 첫 번째 위쪽에 찍힌다
-    static void AddStampMark(Paper paper, Color color, float shiftX)
+    // 시크릿의 두 번째 도장은 첫 번째와 살짝 어긋나게 겹쳐 찍힌다(두 번 찍힌 자국이 보이도록)
+    static void AddStampMark(Paper paper, Color color, float shiftX, float tiltDeg, float squash)
     {
         if (paper.obj == null) return;
-        var pos = new Vector3(-0.05f + shiftX, paper.top + 0.001f, -0.03f + paper.stamps * 0.06f);
-        paper.stamps++;
-        Primitive(PrimitiveType.Cylinder, "StampMark", paper.obj, new Vector3(0.05f, 0.0005f, 0.05f), color, pos);
+        int n = paper.stamps++;
+        var pos = new Vector3(-0.05f + shiftX + n * 0.01f, paper.top + 0.001f + n * 0.0002f, -0.03f + n * 0.012f);
+        var mark = Primitive(PrimitiveType.Cylinder, "StampMark", paper.obj, new Vector3(0.05f, 0.0005f, 0.05f * squash), color, pos);
+        mark.transform.localRotation = Quaternion.Euler(0f, tiltDeg, 0f);
     }
 
-    static void AddSignMark(Paper paper, Color color, float shiftX)
+    static void AddSignMark(Paper paper, Color color, float shiftX, float tiltDeg)
     {
         if (paper.obj == null) return;
-        Primitive(PrimitiveType.Cube, "SignMark", paper.obj, new Vector3(0.07f, 0.0005f, 0.008f), color, new Vector3(0.06f + shiftX, paper.top + 0.001f, -0.09f));
+        var mark = Primitive(PrimitiveType.Cube, "SignMark", paper.obj, new Vector3(0.07f, 0.0005f, 0.008f), color, new Vector3(0.06f + shiftX, paper.top + 0.001f, -0.09f));
+        mark.transform.localRotation = Quaternion.Euler(0f, tiltDeg, 0f);
     }
 
     // 씬에 없는 것만 임시 도형으로 만든다: 도장(왼쪽), 펜(오른쪽), 인턴(책상과 함께)
